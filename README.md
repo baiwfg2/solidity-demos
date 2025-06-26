@@ -11,3 +11,7 @@ REPORT_GAS=true npx hardhat test
 npx hardhat node
 npx hardhat ignition deploy ./ignition/modules/Lock.js
 ```
+
+# References
+
+https://www.alchemy.com/docs/how-to-create-an-nft
