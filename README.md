@@ -1,17 +1,7 @@
-# Sample Hardhat Project
+# solidity-demos
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
+This repo is for solidity new learners to master basic understanding of blockchain development. It's going to have many different demos that illustrate variaties of use cases.
 
-Try running some of the following tasks:
+# Simple descriptions of demos
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.js
-```
-
-# References
-
-https://www.alchemy.com/docs/how-to-create-an-nft
+TO-DO
