@@ -1,0 +1,15 @@
+{
+    "attributes": [
+        {
+            "trait_type": "Animation",
+            "value": "Ninja"
+        },
+        {
+            "trait_type": "Technology",
+            "value": "ThinkPad"
+        }
+    ],
+    "description": "The ninja is hacking throught coding",
+    "image": "https://gateway.pinata.cloud/ipfs/bafkreifyt4ra4n7462yuoq52eqomj7f4nyvvuwwyhnyqnneqxskjfy6rbm",
+    "name": "Warlock"
+}
