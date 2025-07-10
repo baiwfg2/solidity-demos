@@ -11,3 +11,9 @@ REPORT_GAS=true npx hardhat test
 npx hardhat node
 npx hardhat ignition deploy ./ignition/modules/Lock.js
 ```
+
+# Effects
+
+## run deploy locally
+
+![](../assets/cross-chain-ccip-local.png)
