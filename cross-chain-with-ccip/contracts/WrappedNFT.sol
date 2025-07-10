@@ -7,6 +7,7 @@ contract WrappedNFT is MyNFT {
     constructor(string memory tokenName, string memory tokenSymbol) 
         MyNFT(tokenName, tokenSymbol) {}
 
+    // in product env, need more permission control
     function mintWithSpecificTokenId(address to, uint256 _tokenId) public {
         _safeMint(to, _tokenId);
     }

@@ -7,7 +7,7 @@ import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import {CCIPReceiver} from "@chainlink/contracts-ccip/contracts/applications/CCIPReceiver.sol";
 import {IERC20} from "@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/utils/SafeERC20.sol";
-import {MyNFT} from "./MyNFT.sol";
+import {WrappedNFT} from "./WrappedNFT.sol";
 
 /**
  * THIS IS AN EXAMPLE CONTRACT THAT USES HARDCODED VALUES FOR CLARITY.
@@ -47,6 +47,15 @@ contract NFTPoolBurnAndMint is CCIPReceiver, OwnerIsCreator {
         string text // The text that was received.
     );
 
+    struct ReqData {
+        uint256 tokenId;
+        address newOwner;
+    }
+    event TokenMinted(
+        uint256 tokenId,
+        address newOwner
+    );
+
     bytes32 private s_lastReceivedMessageId; // Store the last received messageId.
     string private s_lastReceivedText; // Store the last received text.
 
@@ -60,14 +69,14 @@ contract NFTPoolBurnAndMint is CCIPReceiver, OwnerIsCreator {
     mapping(address => bool) public allowlistedSenders;
 
     IERC20 private s_linkToken;
-    MyNFT public nft;
+    WrappedNFT public wnft;
 
     /// @notice Constructor initializes the contract with the router address.
     /// @param _router The address of the router contract.
     /// @param _link The address of the link contract.
-    constructor(address _router, address _link, address nftAddr) CCIPReceiver(_router) {
+    constructor(address _router, address _link, address wnftAddr) CCIPReceiver(_router) {
         s_linkToken = IERC20(_link);
-        nft = MyNFT(nftAddr);
+        wnft = WrappedNFT(wnftAddr);
     }
 
     /// @dev Modifier that checks if the chain with the given destinationChainSelector is allowlisted.
@@ -95,9 +104,11 @@ contract NFTPoolBurnAndMint is CCIPReceiver, OwnerIsCreator {
         _;
     }
 
-    function lockAndSendNft(uint256 tokenId, address newOwner,
+    function burnAndSendNft(uint256 tokenId, address newOwner,
         uint64 chainSelector, address receiver) public returns(bytes32) {
-        nft.transferFrom(msg.sender, address(this), tokenId);
+        wnft.transferFrom(msg.sender, address(this), tokenId);
+        wnft.burn(tokenId);
+
         bytes memory payload = abi.encode(tokenId, newOwner);
         bytes32 msgId = sendMessagePayLINK(chainSelector, receiver, payload);
         return msgId;
@@ -243,15 +254,13 @@ contract NFTPoolBurnAndMint is CCIPReceiver, OwnerIsCreator {
             abi.decode(any2EvmMessage.sender, (address))
         ) // Make sure source chain and sender are allowlisted
     {
-        s_lastReceivedMessageId = any2EvmMessage.messageId; // fetch the messageId
-        s_lastReceivedText = abi.decode(any2EvmMessage.data, (string)); // abi-decoding of the sent text
+        ReqData memory rd = abi.decode(any2EvmMessage.data, (ReqData));
+        wnft.mintWithSpecificTokenId(rd.newOwner, rd.tokenId);
 
-        emit MessageReceived(
-            any2EvmMessage.messageId,
-            any2EvmMessage.sourceChainSelector, // fetch the source chain identifier (aka selector)
-            abi.decode(any2EvmMessage.sender, (address)), // abi-decoding of the sender address,
-            abi.decode(any2EvmMessage.data, (string))
-        );
+        s_lastReceivedMessageId = any2EvmMessage.messageId; // fetch the messageId
+        // s_lastReceivedText = abi.decode(any2EvmMessage.data, (string)); // abi-decoding of the sent text
+
+        emit TokenMinted(rd.tokenId, rd.newOwner);
     }
 
     /// @notice Construct a CCIP message.
