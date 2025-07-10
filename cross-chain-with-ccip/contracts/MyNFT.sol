@@ -7,13 +7,14 @@ import {ERC721Burnable} from "@openzeppelin/contracts/token/ERC721/extensions/ER
 import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+// boilerplate code from: https://www.openzeppelin.com/solidity-contracts
 
 contract MyNFT is ERC721, ERC721Enumerable, ERC721URIStorage, ERC721Burnable, Ownable {
     uint256 private _nextTokenId;
 
-    constructor(address initialOwner)
-        ERC721("MyNFT", "MTK")
-        Ownable(initialOwner)
+    constructor(string memory tokenName, string memory symbol)
+        ERC721(tokenName, symbol)
+        Ownable(msg.sender)
     {}
 
     function safeMint(address to, string memory uri)
