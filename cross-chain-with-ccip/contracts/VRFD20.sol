@@ -52,9 +52,9 @@ contract VRFD20 is VRFConsumerBaseV2Plus {
     uint32 public numWords = 1;
 
     // map rollers to requestIds
-    mapping(uint256 => address) private s_rollers;
+    mapping(uint256 => address) public s_rollers;
     // map vrf results to rollers
-    mapping(address => uint256) private s_results;
+    mapping(address => uint256) public s_results;
 
     event DiceRolled(uint256 indexed requestId, address indexed roller);
     event DiceLanded(uint256 indexed requestId, uint256 indexed result);
@@ -100,6 +100,10 @@ contract VRFD20 is VRFConsumerBaseV2Plus {
         s_rollers[requestId] = roller;
         s_results[roller] = ROLL_IN_PROGRESS;
         emit DiceRolled(requestId, roller);
+    }
+
+    function clearResult(address addr) public onlyOwner {
+        s_results[addr] = 0;
     }
 
     /**
