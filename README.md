@@ -2,11 +2,7 @@
 
 This repo is for solidity new learners to master basic understanding of blockchain development. It's going to have many different demos that illustrate variaties of use cases.
 
-# Simple descriptions of demos
+# Note
 
-chainlink RWA demos:
-
-https://cll-devrel.gitbook.io/mandarin-tokenized-rwa-bootcamp-sep-oct-2024/
-
-
-TO-DO
+1. You should take notice of what I've written in git commit message, may be helpful. I like to write down details of a given commit.
+2. Some codes may be hard-coded, you should replace with your own.

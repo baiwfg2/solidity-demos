@@ -3,6 +3,7 @@ require("@nomicfoundation/hardhat-ethers");
 require("hardhat-deploy");
 
 require("dotenv").config();
+require("./tasks") // 自动找index.js
 
 const { SEPOLIA_RPC_URL, PRIVATE_KEY1 } = process.env;
 

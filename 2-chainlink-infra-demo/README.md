@@ -18,6 +18,27 @@ chainlink-contracts: [1.4.0](https://github.com/smartcontractkit/chainlink-evm/t
 
 # Effects
 
+## run a RWA demo
+
+chainlink RWA demos:
+
+https://cll-devrel.gitbook.io/mandarin-tokenized-rwa-bootcamp-sep-oct-2024/
+
+```
+npx hardhat run scripts/deploy-RealEstateToken.js --network fuji  
+npx hardhat run scripts/rwa-deploy-Issuer.js --network fuji 
+```
+
+After deployed, do
+
+```
+$ npx hardhat set-issuer --tokenaddr 0x9C406980106d46c21b7953Fd3A5279fE62FF80ea --issueraddr 0xcE8C2291733071ecA5439A9F57F8285Cebe24b92 --network 
+fuji
+[dotenv@17.2.0] injecting env (7) from .env (tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild)
+signer: 0xA4a8dcE9F35C75f57dF0449B0543Cd767BeF6305
+token total supply:0, setIssuer done
+```
+
 ## run a deployed VRF20 contract
 
 For this contract, I have made random request on Remix, so here it will return `Already rolled` error
