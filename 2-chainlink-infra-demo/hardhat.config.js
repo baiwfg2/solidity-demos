@@ -11,7 +11,15 @@ const { SEPOLIA_RPC_URL, PRIVATE_KEY1 } = process.env;
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  solidity: "0.8.28",
+  solidity: {
+    version: "0.8.28",
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200
+      }
+    }
+  },
   namedAccounts: {
     firstAccount: {
       default: 0
@@ -35,6 +43,12 @@ module.exports = {
       companionNetworks: {
         destChain: "sepolia"
       }
+    },
+    fuji: {
+      url: process.env.FUJI_RPC_URL,
+      accounts: [PRIVATE_KEY1],
+      chainId: 43113,
+      blockConfirmations: 6
     }
   }
 };
