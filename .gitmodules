@@ -1,0 +1,6 @@
+[submodule "3-foundry-fundme/lib/forge-std"]
+	path = 3-foundry-fundme/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "3-foundry-fundme/lib/chainlink-evm"]
+	path = 3-foundry-fundme/lib/chainlink-evm
+	url = https://github.com/smartcontractkit/chainlink-evm
