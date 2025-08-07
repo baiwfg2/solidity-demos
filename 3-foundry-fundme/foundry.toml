@@ -10,4 +10,41 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
+# 编译优化选项
+# 不要在这里设置 optimizer，让各个 profile 自己控制
+# optimizer = true
+# optimizer_runs = 200
+# via_ir = false
+
+# 其他编译选项
+# solc_version = "0.8.19"
+# evm_version = "paris"
+
+########### Foundry 的配置优先级是：
+# 命令行参数 (最高优先级)
+# 当前使用的 profile 配置
+# [profile.default] 配置
+# 默认值 (最低优先级)
+
+# 更多优化选项，这是 TOML 的嵌套配置语法，optimizer_details 是 profile.default 的子配置，专门用于精细控制优化器行为
+[profile.default.optimizer_details]
+peephole = true
+inliner = true
+jumpdest_remover = true
+order_literals = true
+deduplicate = true
+cse = true
+constant_optimizer = true
+yul = true
+
+# 生产环境配置
+[profile.production]
+optimizer = true
+optimizer_runs = 1000000
+via_ir = true
+
+# 测试环境配置
+[profile.test]
+optimizer = false
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

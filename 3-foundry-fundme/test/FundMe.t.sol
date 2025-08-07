@@ -18,6 +18,7 @@ contract FundMeTest is CodeConstants, StdCheats, Test {
     uint256 public constant STARTING_USER_BALANCE = 10 ether;
     uint256 public constant GAS_PRICE = 1;
 
+    // 视频11:57:48 谈到 address USER = makeAddr("User");
     uint160 public constant USER_NUMBER = 50;
     address public constant USER = address(USER_NUMBER);
 
@@ -26,14 +27,16 @@ contract FundMeTest is CodeConstants, StdCheats, Test {
     // uint256 public constant SEND_VALUE = 1000000000000000000;
 
     function setUp() external {
-        if (true) { // isZkSyncChain ?
+        if (true) { // !isZkSyncChain ? 
             DeployFundMe deployer = new DeployFundMe();
             (fundMe, helperConfig) = deployer.deployFundMe();
+            console.log("DeployFundMe:", address(deployer), ", its balance:", address(deployer).balance);
         } else {
             MockV3Aggregator mockPriceFeed = new MockV3Aggregator(DECIMALS, INITIAL_PRICE);
             fundMe = new FundMe(address(mockPriceFeed));
         }
-        vm.deal(USER, STARTING_USER_BALANCE);
+        vm.deal(USER, STARTING_USER_BALANCE); // airdrop some ETH to the user
+        console.log("owner:", fundMe.getOwner(), ", its balance:", fundMe.getOwner().balance);
     }
 
     function testPriceFeedSetCorrectly() public {
@@ -44,7 +47,7 @@ contract FundMeTest is CodeConstants, StdCheats, Test {
     }
 
     function testFundFailsWithoutEnoughETH() public {
-        vm.expectRevert();
+        vm.expectRevert(); // 预期下一行代码 revert
         fundMe.fund();
     }
 
@@ -85,8 +88,10 @@ contract FundMeTest is CodeConstants, StdCheats, Test {
         // Arrange
         uint256 startingFundMeBalance = address(fundMe).balance;
         uint256 startingOwnerBalance = fundMe.getOwner().balance;
+        console.log("startingFundMeBalance:", startingFundMeBalance);
+        console.log("startingOwnerBalance:", startingOwnerBalance);
 
-        // vm.txGasPrice(GAS_PRICE);
+        // vm.txGasPrice(GAS_PRICE); // 默认anvil上的gas price = 0
         // uint256 gasStart = gasleft();
         // // Act
         vm.startPrank(fundMe.getOwner());
@@ -108,7 +113,7 @@ contract FundMeTest is CodeConstants, StdCheats, Test {
 
     // Can we do our withdraw function a cheaper way?
     function testWithdrawFromMultipleFunders() public funded {
-        uint160 numberOfFunders = 10;
+        uint160 numberOfFunders = 100;
         uint160 startingFunderIndex = 2 + USER_NUMBER;
 
         uint256 originalFundMeBalance = address(fundMe).balance; // This is for people running forked tests!
@@ -123,9 +128,12 @@ contract FundMeTest is CodeConstants, StdCheats, Test {
         uint256 startingFundedeBalance = address(fundMe).balance;
         uint256 startingOwnerBalance = fundMe.getOwner().balance;
 
+        uint256 gasStart = gasleft();
         vm.startPrank(fundMe.getOwner());
         fundMe.withdraw();
         vm.stopPrank();
+        uint256 gasEnd = gasleft();
+        console.log("`withdraw` gas consumed:", gasStart - gasEnd);
 
         assert(address(fundMe).balance == 0);
         assert(startingFundedeBalance + startingOwnerBalance == fundMe.getOwner().balance);
@@ -134,5 +142,24 @@ contract FundMeTest is CodeConstants, StdCheats, Test {
         uint256 totalValueWithdrawn = fundMe.getOwner().balance - startingOwnerBalance;
 
         assert(expectedTotalValueWithdrawn == totalValueWithdrawn);
+    }
+
+    function testWithdrawFromMultipleFundersWithCheaperGas() public funded {
+        uint160 numberOfFunders = 100;
+        uint160 startingFunderIndex = 2 + USER_NUMBER;
+
+        for (uint160 i = startingFunderIndex; i < numberOfFunders + startingFunderIndex; i++) {
+            // we get hoax from stdcheats
+            // prank + deal
+            hoax(address(i), STARTING_USER_BALANCE);
+            fundMe.fund{value: SEND_VALUE}();
+        }
+
+        uint256 gasStart = gasleft();
+        vm.startPrank(fundMe.getOwner());
+        fundMe.cheaperWithdraw(); // gas 实测比 withdraw 便宜一些
+        vm.stopPrank();
+        uint256 gasEnd = gasleft();
+        console.log("`cheaperWithdraw` gas consumed:", gasStart - gasEnd);
     }
 }
