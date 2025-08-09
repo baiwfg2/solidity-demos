@@ -2,13 +2,13 @@
 
 pragma solidity 0.8.30;
 
-import {DeployFundMe} from "../script/DeployFundMe.s.sol";
-import {FundMe} from "../src/FundMe.sol";
-import {HelperConfig, CodeConstants} from "../script/HelperConfig.s.sol";
+import {DeployFundMe} from "../../script/DeployFundMe.s.sol";
+import {FundMe} from "../../src/FundMe.sol";
+import {HelperConfig, CodeConstants} from "../../script/HelperConfig.s.sol";
 import {Test, console} from "forge-std/Test.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 //import {ZkSyncChainChecker} from "lib/foundry-devops/src/ZkSyncChainChecker.sol";
-import {MockV3Aggregator} from "../test/MockV3Aggregator.sol";
+import {MockV3Aggregator} from "../../test/MockV3Aggregator.sol";
 
 contract FundMeTest is CodeConstants, StdCheats, Test {
     FundMe public fundMe;
@@ -26,6 +26,7 @@ contract FundMeTest is CodeConstants, StdCheats, Test {
     // uint256 public constant SEND_VALUE = 1_000_000_000_000_000_000;
     // uint256 public constant SEND_VALUE = 1000000000000000000;
 
+    // 用 script/ 里的deploy脚本在每个用例运行前做部署（在testnet上可能运行缓慢 ??）
     function setUp() external {
         if (true) { // !isZkSyncChain ? 
             DeployFundMe deployer = new DeployFundMe();

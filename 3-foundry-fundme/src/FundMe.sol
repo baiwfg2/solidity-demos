@@ -16,6 +16,12 @@ error FundMe__NotOwner();
  * @dev This implements price feeds as our library
  */
 contract FundMe {
+    /*
+    含义：
+        将 PriceConverter 库中的函数附加到 uint256 类型
+        让 uint256 类型的变量可以直接调用这些函数
+        第一个参数会自动传入调用者本身
+    */
     // Type Declarations
     using PriceConverter for uint256;
 
