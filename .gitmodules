@@ -7,3 +7,18 @@
 [submodule "3-foundry-fundme/lib/foundry-devops"]
 	path = 3-foundry-fundme/lib/foundry-devops
 	url = https://github.com/Cyfrin/foundry-devops
+[submodule "4-lottery/lib/forge-std"]
+	path = 4-lottery/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "4-lottery/lib/chainlink-evm"]
+	path = 4-lottery/lib/chainlink-evm
+	url = https://github.com/smartcontractkit/chainlink-evm
+[submodule "4-lottery/lib/foundry-devops"]
+	path = 4-lottery/lib/foundry-devops
+	url = https://github.com/cyfrin/foundry-devops
+[submodule "4-lottery/lib/solmate"]
+	path = 4-lottery/lib/solmate
+	url = https://github.com/transmissions11/solmate
+[submodule "4-lottery/lib/openzeppelin-contracts"]
+	path = 4-lottery/lib/openzeppelin-contracts
+	url = https://github.com/openzeppelin/openzeppelin-contracts
