@@ -20,6 +20,8 @@ contract CreateSubscription is Script {
     function createSubscription(address vrfCoordinatorV2_5, address account) public returns (uint256, address) {
         console.log("Creating subscription on chainId: ", block.chainid);
         vm.startBroadcast(account);
+        // 不支持非本地网？
+        // 这个接口会 emit SubscriptionCreated
         uint256 subId = VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).createSubscription();
         vm.stopBroadcast();
         console.log("Your subscription Id is: ", subId);
@@ -33,11 +35,13 @@ contract CreateSubscription is Script {
 }
 
 contract AddConsumer is Script {
-    function addConsumer(address contractToAddToVrf, address vrfCoordinator, uint256 subId, address account) public {
+    function doAddConsumer(address contractToAddToVrf, address vrfCoordinator, uint256 subId, address account) public {
         console.log("Adding consumer contract: ", contractToAddToVrf);
-        console.log("Using vrfCoordinator: ", vrfCoordinator);
-        console.log("On ChainID: ", block.chainid);
+        console.log("\tUsing vrfCoordinator: ", vrfCoordinator, ", account:", account);
+        console.log("\tOn ChainID: ", block.chainid);
         vm.startBroadcast(account);
+        // 没有对sepolia 的支持？(不是指 fork-url 场景)
+        // https://github.com/Cyfrin/foundry-full-course-cu/discussions/4233
         VRFCoordinatorV2_5Mock(vrfCoordinator).addConsumer(subId, contractToAddToVrf);
         vm.stopBroadcast();
     }
@@ -48,7 +52,7 @@ contract AddConsumer is Script {
         address vrfCoordinatorV2_5 = helperConfig.getConfig().vrfCoordinatorV2_5;
         address account = helperConfig.getConfig().account;
 
-        addConsumer(mostRecentlyDeployed, vrfCoordinatorV2_5, subId, account);
+        doAddConsumer(mostRecentlyDeployed, vrfCoordinatorV2_5, subId, account);
     }
 
     function run() external {
@@ -75,23 +79,25 @@ contract FundSubscription is CodeConstants, Script {
             console.log("New SubId Created! ", subId, "VRF Address: ", vrfCoordinatorV2_5);
         }
 
-        fundSubscription(vrfCoordinatorV2_5, subId, link, account);
+        fundSub(vrfCoordinatorV2_5, subId, link, account);
     }
 
-    function fundSubscription(address vrfCoordinatorV2_5, uint256 subId, address link, address account) public {
+    function fundSub(address vrfCoordinatorV2_5, uint256 subId, address link, address account) public {
         console.log("Funding subscription: ", subId);
-        console.log("Using vrfCoordinator: ", vrfCoordinatorV2_5);
-        console.log("On ChainID: ", block.chainid);
+        console.log("\tUsing vrfCoordinator: ", vrfCoordinatorV2_5);
+        console.log("\tOn ChainID: ", block.chainid);
         if (block.chainid == LOCAL_CHAIN_ID) {
             vm.startBroadcast(account);
             VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fundSubscription(subId, FUND_AMOUNT);
             vm.stopBroadcast();
         } else {
+            console.log("fundSub: ready to call LinkToken.transferAndCall");
             console.log(LinkToken(link).balanceOf(msg.sender));
             console.log(msg.sender);
             console.log(LinkToken(link).balanceOf(address(this)));
             console.log(address(this));
             vm.startBroadcast(account);
+            // 这里的subId 是Mock(real-sepolia-coordinator-address).createSubscription 得到的
             LinkToken(link).transferAndCall(vrfCoordinatorV2_5, FUND_AMOUNT, abi.encode(subId));
             vm.stopBroadcast();
         }

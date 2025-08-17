@@ -11,10 +11,13 @@ import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VR
 import {LinkToken} from "../../test/mocks/LinkToken.sol";
 import {CodeConstants} from "../../script/HelperConfig.s.sol";
 
+import {console} from "forge-std/Script.sol";
+
 contract RaffleTest is Test, CodeConstants {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
+    // 作者也谈到了，目前只能再在测试里重新声明event，以便做event相关的检测
     event RequestedRaffleWinner(uint256 indexed requestId);
     event RaffleEnter(address indexed player);
     event WinnerPicked(address indexed player);
@@ -51,7 +54,14 @@ contract RaffleTest is Test, CodeConstants {
         vm.startPrank(msg.sender);
         if (block.chainid == LOCAL_CHAIN_ID) {
             link.mint(msg.sender, LINK_BALANCE);
+            /*
+                1. fund的操作写在测试里似乎不好。
+                2. 似乎fund前也可以做add consumer
+                3. 把fund注释掉，testDontAllowPlayersToEnterWhileRaffleIsCalculating 也能过 ？？
+                    AI说正常，没有充值LINK只会影响到fulfil函数能否接受到随机数
+            */
             VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fundSubscription(subscriptionId, LINK_BALANCE);
+            console.log("LOCAL - funded subscription");
         }
         link.approve(vrfCoordinatorV2_5, LINK_BALANCE);
         vm.stopPrank();
@@ -88,6 +98,7 @@ contract RaffleTest is Test, CodeConstants {
 
         // Act / Assert
         vm.expectEmit(true, false, false, false, address(raffle));
+        // 这只是为了让 Foundry知道 event 的结构和参数
         emit RaffleEnter(PLAYER);
         raffle.enterRaffle{value: raffleEntranceFee}();
     }
@@ -98,6 +109,7 @@ contract RaffleTest is Test, CodeConstants {
         raffle.enterRaffle{value: raffleEntranceFee}();
         vm.warp(block.timestamp + automationUpdateInterval + 1);
         vm.roll(block.number + 1);
+        // 前面的操作是为了让checkUpkeep的条件通过
         raffle.performUpkeep("");
 
         // Act / Assert
@@ -176,6 +188,7 @@ contract RaffleTest is Test, CodeConstants {
 
         // Act / Assert
         // It doesnt revert
+        // 这里 msg.sender 不是 PLAYER，而是默认测试账户
         raffle.performUpkeep("");
     }
 
@@ -185,6 +198,7 @@ contract RaffleTest is Test, CodeConstants {
         uint256 numPlayers = 0;
         Raffle.RaffleState rState = raffle.getRaffleState();
         // Act / Assert
+        // 这里是检验revert参数的方法
         vm.expectRevert(
             abi.encodeWithSelector(Raffle.Raffle__UpkeepNotNeeded.selector, currentBalance, numPlayers, rState)
         );
@@ -198,10 +212,11 @@ contract RaffleTest is Test, CodeConstants {
         vm.warp(block.timestamp + automationUpdateInterval + 1);
         vm.roll(block.number + 1);
 
-        // Act
+        // Act （这里在演示如何从event中拿到参数值）
         vm.recordLogs();
         raffle.performUpkeep(""); // emits requestId
         Vm.Log[] memory entries = vm.getRecordedLogs();
+        // 0号是VRF 的event，performUpkeep的event是1号；0号参数是reserved的，因此requestId 是 1号
         bytes32 requestId = entries[1].topics[1];
 
         // Assert
@@ -241,10 +256,11 @@ contract RaffleTest is Test, CodeConstants {
     }
 
     function testFulfillRandomWordsPicksAWinnerResetsAndSendsMoney() public raffleEntered skipFork {
+        // AI: 在本地测试环境下，mock 的 VRFCoordinator 返回的“随机数”是确定的，通常是 1
         address expectedWinner = address(1);
 
         // Arrange
-        uint256 additionalEntrances = 3;
+        uint256 additionalEntrances = 3; // raffleEntered 中已经加入了一个PLAYER
         uint256 startingIndex = 1; // We have starting index be 1 so we can start with address(1) and not address(0)
 
         for (uint256 i = startingIndex; i < startingIndex + additionalEntrances; i++) {
@@ -260,9 +276,21 @@ contract RaffleTest is Test, CodeConstants {
         vm.recordLogs();
         raffle.performUpkeep(""); // emits requestId
         Vm.Log[] memory entries = vm.getRecordedLogs();
+        // 0号是VRF 的event，performUpkeep的event是1号；0号参数是reserved的，因此requestId 编号是 1
         console2.logBytes32(entries[1].topics[1]);
         bytes32 requestId = entries[1].topics[1]; // get the requestId from the logs
 
+        /*
+        1 真实流程
+            Raffle 合约向 VRFCoordinator 请求随机数（requestRandomWords）。
+            VRFCoordinator 合约收到请求后，由它来调用 Raffle 合约的 fulfillRandomWords 回调函数，传递随机数。
+        2 安全性设计
+            Raffle 合约的 fulfillRandomWords 通常有 onlyVRFCoordinator 修饰符（或内部校验或者是internal），只允许
+            VRFCoordinator 合约来调用，防止恶意合约或用户伪造随机数。
+        3 测试环境
+            你用 mock（VRFCoordinatorV2_5Mock）模拟 VRFCoordinator 合约。
+            你需要通过 mock 合约的 fulfillRandomWords 方法，由 mock 合约来“回调” Raffle 合约，这才符合实际链上流程。
+        */
         VRFCoordinatorV2_5Mock(vrfCoordinatorV2_5).fulfillRandomWords(uint256(requestId), address(raffle));
 
         // Assert

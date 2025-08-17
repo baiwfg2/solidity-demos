@@ -21,11 +21,11 @@
 
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.19;
+pragma solidity ^0.8.30;
 
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
-import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
+import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/interfaces/AutomationCompatibleInterface.sol";
 
 /**
  * @title A sample Raffle Contract
@@ -35,12 +35,14 @@ import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/inter
  */
 contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     /* Errors */
+    // 这样的全名方便看出revert 是哪个合约哪里报出的
     error Raffle__UpkeepNotNeeded(uint256 currentBalance, uint256 numPlayers, uint256 raffleState);
     error Raffle__TransferFailed();
     error Raffle__SendMoreToEnterRaffle();
     error Raffle__RaffleNotOpen();
 
     /* Type declarations */
+    // 当状态变复杂时，bool值不能满足要求，所以引入了枚举类型
     enum RaffleState {
         OPEN,
         CALCULATING
@@ -92,6 +94,9 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
     function enterRaffle() public payable {
         // require(msg.value >= i_entranceFee, "Not enough value sent");
         // require(s_raffleState == RaffleState.OPEN, "Raffle is not open");
+        /* require(msg.value >= i_entranceFee, Raffle__SendMoreToEnterRaffle());
+            Patrick 14:20:48 说这hypothetically less gas efficient than the following expression
+        */
         if (msg.value < i_entranceFee) {
             revert Raffle__SendMoreToEnterRaffle();
         }
@@ -113,7 +118,7 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
      * 3. The contract has ETH.
      * 4. Implicity, your subscription is funded with LINK.
      */
-    function checkUpkeep(bytes memory /* checkData */ )
+    function checkUpkeep(bytes memory /* checkData */ ) // 原始定义是 bytes calldata,但因为要让performUpkeep调用，所以改成了memory
         public
         view
         override
@@ -132,6 +137,7 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
      * and it kicks off a Chainlink VRF call to get a random winner.
      */
     function performUpkeep(bytes calldata /* performData */ ) external override {
+        // 为了避免外部其他方式的错误调用，只好再调 checkUpkeep(对于chainlink node有点重复了)
         (bool upkeepNeeded,) = checkUpkeep("");
         // require(upkeepNeeded, "Upkeep not needed");
         if (!upkeepNeeded) {
@@ -155,12 +161,20 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
             })
         );
         // Quiz... is this redundant?
+        // VRF调用已经emit了，其实有冗余
         emit RequestedRaffleWinner(requestId);
     }
 
     /**
      * @dev This is the function that Chainlink VRF node
      * calls to send the money to the random winner.
+
+     VRFCoordinatorV2_5Mock 合约会调用 Raffle 合约的 fulfillRandomWords，但Raffle 
+        继承自 VRFConsumerBaseV2Plus，而 VRFConsumerBaseV2Plus 里有一个 external 的回调入口
+        （比如 rawFulfillRandomWords 或类似函数）。
+     mock 合约调用的是这个 external/public 的入口函数，这个入口函数内部再调用 virtual函数，即走到
+        Raffle 的 internal fulfillRandomWords。
+     这样 mock 合约就能“间接”让 Raffle 执行 internal 的逻辑。
      */
     function fulfillRandomWords(uint256, /* requestId */ uint256[] calldata randomWords) internal override {
         // s_players size 10
@@ -172,10 +186,11 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         uint256 indexOfWinner = randomWords[0] % s_players.length;
         address payable recentWinner = s_players[indexOfWinner];
         s_recentWinner = recentWinner;
+        // 清空数组的方式
         s_players = new address payable[](0);
         s_raffleState = RaffleState.OPEN;
         s_lastTimeStamp = block.timestamp;
-        emit WinnerPicked(recentWinner);
+        emit WinnerPicked(recentWinner);// 根据CEI pattern，作者觉得这不适合放在最后一行
         (bool success,) = recentWinner.call{value: address(this).balance}("");
         // require(success, "Transfer failed");
         if (!success) {

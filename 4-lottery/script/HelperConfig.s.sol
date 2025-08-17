@@ -36,6 +36,7 @@ contract HelperConfig is CodeConstants, Script {
         uint32 callbackGasLimit;
         address vrfCoordinatorV2_5;
         address link;
+        // 为了同时支持在sepolia和anvil环境下，account字段需要根据不同环境进行设置，以便startBroadcast时使用
         address account;
     }
 
@@ -100,6 +101,7 @@ contract HelperConfig is CodeConstants, Script {
         pure
         returns (NetworkConfig memory sepoliaNetworkConfig)
     {
+        // https://docs.chain.link/vrf/v2-5/supported-networks
         sepoliaNetworkConfig = NetworkConfig({
             subscriptionId: 0, // If left as 0, our scripts will create one!
             gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae,
@@ -108,17 +110,19 @@ contract HelperConfig is CodeConstants, Script {
             callbackGasLimit: 500000, // 500,000 gas
             vrfCoordinatorV2_5: 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B,
             link: 0x779877A7B0D9E8603169DdbD7836e478b4624789,
+            // 这个地址似乎是 Patrick的PubKey
             account: 0x643315C9Be056cDEA171F4e7b2222a4ddaB9F88D
         });
     }
 
+    // 如果也在构造里加入到map中，稍微不太好的点是，总是执行了mock部署
     function getOrCreateAnvilEthConfig() public returns (NetworkConfig memory) {
         // Check to see if we set an active network config
         if (localNetworkConfig.vrfCoordinatorV2_5 != address(0)) {
             return localNetworkConfig;
         }
 
-        console2.log(unicode"⚠️ You have deployed a mock conract!");
+        console2.log(unicode"⚠️ You have deployed a mock contract!");
         console2.log("Make sure this was intentional");
         vm.startBroadcast();
         VRFCoordinatorV2_5Mock vrfCoordinatorV2_5Mock = new VRFCoordinatorV2_5Mock(
@@ -129,6 +133,7 @@ contract HelperConfig is CodeConstants, Script {
         LinkToken link = new LinkToken();
         uint256 subscriptionId = vrfCoordinatorV2_5Mock.createSubscription();
         vm.stopBroadcast();
+        console2.log("Created subscriptionId:", subscriptionId);
 
         localNetworkConfig = NetworkConfig({
             subscriptionId: subscriptionId,
@@ -136,6 +141,7 @@ contract HelperConfig is CodeConstants, Script {
             automationUpdateInterval: 30, // 30 seconds
             raffleEntranceFee: 0.01 ether,
             callbackGasLimit: 500000, // 500,000 gas
+            // 一个子类实例地址传给接口成员
             vrfCoordinatorV2_5: address(vrfCoordinatorV2_5Mock),
             link: address(link),
             account: FOUNDRY_DEFAULT_SENDER
