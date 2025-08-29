@@ -1,0 +1,44 @@
+{
+  "../3-foundry-fundme/lib/chainlink-evm": {
+    "rev": "e06cc226086ad91cfede63e96c63e5b3440c9801"
+  },
+  "../3-foundry-fundme/lib/forge-std": {
+    "rev": "8bbcf6e3f8f62f419e5429a0bd89331c85c37824"
+  },
+  "../3-foundry-fundme/lib/foundry-devops": {
+    "rev": "efff097a87e70c3d15661c9f2a2daeae0b33d5d5"
+  },
+  "../4-lottery/lib/chainlink-evm": {
+    "rev": "016810ba57adc086f1faa93dfcb92a4ec4049efd"
+  },
+  "../4-lottery/lib/forge-std": {
+    "rev": "8bbcf6e3f8f62f419e5429a0bd89331c85c37824"
+  },
+  "../4-lottery/lib/foundry-devops": {
+    "rev": "efff097a87e70c3d15661c9f2a2daeae0b33d5d5"
+  },
+  "../4-lottery/lib/openzeppelin-contracts": {
+    "rev": "3790c59623e99cb0272ddf84e6a17a5979d06b35"
+  },
+  "../4-lottery/lib/solmate": {
+    "rev": "89365b880c4f3c786bdd453d4b8e8fe410344a69"
+  },
+  "lib\\chainlink-evm": {
+    "tag": {
+      "name": "v0.3.2",
+      "rev": "f190212bab15e84fe49db88f495ad026e6c1d520"
+    }
+  },
+  "lib\\forge-std": {
+    "tag": {
+      "name": "v1.10.0",
+      "rev": "8bbcf6e3f8f62f419e5429a0bd89331c85c37824"
+    }
+  },
+  "lib\\openzeppelin-contracts": {
+    "tag": {
+      "name": "v5.4.0",
+      "rev": "c64a1edb67b6e3f4a15cca8909c9482ad33a02b0"
+    }
+  }
+}
