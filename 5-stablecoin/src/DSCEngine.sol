@@ -88,6 +88,7 @@ contract DSCEngine is ReentrancyGuard {
     /// @dev Amount of DSC minted by user
     mapping(address user => uint256 amount) private s_DSCMinted;
     /// @dev If we know exactly how many tokens we have, we could make this immutable!
+    // 24:25:08 说主要是为了能够遍历user的total collateral
     address[] private s_collateralTokens;
 
     ///////////////////
@@ -354,6 +355,8 @@ contract DSCEngine is ReentrancyGuard {
     {
         if (totalDscMinted == 0) return type(uint256).max;
         uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
+        // 即使两个数都是 1e18 精度，为了防止相除后变成整数而丢失小数部分，需要给分子再放大 1e18 倍，这样结果仍然保持 1e18 精度，可以表示小数
+        // 这是 DeFi 协议中处理比率/百分比的标准做法
         return (collateralAdjustedForThreshold * PRECISION) / totalDscMinted;
     }
 
