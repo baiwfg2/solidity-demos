@@ -156,6 +156,9 @@ contract DSCEngine is ReentrancyGuard {
      * @param amountCollateral: The amount of collateral you're withdrawing
      * @param amountDscToBurn: The amount of DSC you want to burn
      * @notice This function will withdraw your collateral and burn DSC in one transaction
+     // 用户如何保证collateral 和toBurn 的量是匹配的，是不是会发生总有一个量未完全取出（对于抵押品）或者销毁（对于DSC)
+     // this is not user-friendly design
+     // see the end of file, has more optimization function
      */
     function redeemCollateralForDsc(
         address tokenCollateralAddress,
@@ -166,6 +169,7 @@ contract DSCEngine is ReentrancyGuard {
         moreThanZero(amountCollateral)
         isAllowedToken(tokenCollateralAddress)
     {
+        // if we redeem first, the health factor could be violated. so burn first
         _burnDsc(amountDscToBurn, msg.sender, msg.sender);
         _redeemCollateral(tokenCollateralAddress, amountCollateral, msg.sender, msg.sender);
         _revertIfHealthFactorIsBroken(msg.sender);
@@ -209,7 +213,7 @@ contract DSCEngine is ReentrancyGuard {
      *
      * @notice: You can partially liquidate a user.
      * @notice: You will get a 10% LIQUIDATION_BONUS for taking the users funds.
-    * @notice: This function working assumes that the protocol will be roughly 150% overcollateralized in order for this
+    * @notice: This function working assumes that the protocol will be roughly 200% overcollateralized in order for this
     to work.
     * @notice: A known bug would be if the protocol was only 100% collateralized, we wouldn't be able to liquidate
     anyone.
@@ -239,6 +243,7 @@ contract DSCEngine is ReentrancyGuard {
         // Burn DSC equal to debtToCover
         // Figure out how much collateral to recover based on how much burnt
         _redeemCollateral(collateral, tokenAmountFromDebtCovered + bonusCollateral, user, msg.sender);
+        // 这里有一个前提：liquidator 自身得有足够的DSC 来偿还user 债务
         _burnDsc(debtToCover, user, msg.sender);
 
         uint256 endingUserHealthFactor = _healthFactor(user);
@@ -246,6 +251,8 @@ contract DSCEngine is ReentrancyGuard {
         if (endingUserHealthFactor <= startingUserHealthFactor) {
             revert DSCEngine__HealthFactorNotImproved();
         }
+        // 不能影响 liquidator 的健康因子，所以也要做检查
+        // 防止协议在极端情况下出现问题, 避免连锁清算
         _revertIfHealthFactorIsBroken(msg.sender);
     }
 
@@ -298,6 +305,7 @@ contract DSCEngine is ReentrancyGuard {
     )
         private
     {
+        // depending on solidity to check underflow. Better to use explicit check
         s_collateralDeposited[from][tokenCollateralAddress] -= amountCollateral;
         emit CollateralRedeemed(from, to, tokenCollateralAddress, amountCollateral);
         bool success = IERC20(tokenCollateralAddress).transfer(to, amountCollateral);
@@ -309,12 +317,14 @@ contract DSCEngine is ReentrancyGuard {
     function _burnDsc(uint256 amountDscToBurn, address onBehalfOf, address dscFrom) private {
         s_DSCMinted[onBehalfOf] -= amountDscToBurn;
 
+        // Whether directly using `burnFrom` is better ?
         bool success = i_dsc.transferFrom(dscFrom, address(this), amountDscToBurn);
         // This conditional is hypothetically unreachable
         if (!success) {
             revert DSCEngine__TransferFailed();
         }
         i_dsc.burn(amountDscToBurn);
+        // no need to check health factor
     }
 
     //////////////////////////////
@@ -357,6 +367,7 @@ contract DSCEngine is ReentrancyGuard {
         uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
         // 即使两个数都是 1e18 精度，为了防止相除后变成整数而丢失小数部分，需要给分子再放大 1e18 倍，这样结果仍然保持 1e18 精度，可以表示小数
         // 这是 DeFi 协议中处理比率/百分比的标准做法
+        // 这里有一个隐含假设：DSC 作为稳定币，其价值不变，因此也就不用通过price feed来查询当前的价格，就当成是 1$
         return (collateralAdjustedForThreshold * PRECISION) / totalDscMinted;
     }
 
@@ -415,6 +426,12 @@ contract DSCEngine is ReentrancyGuard {
         return totalCollateralValueInUsd;
     }
 
+    // 给定DSC 数量，计算需要的抵押品数量
+    function getTokenAmountFromDsc(address token, uint256 dscAmount) public view returns (uint256) {
+        uint256 collateralValueInUsd = (dscAmount * LIQUIDATION_PRECISION) / LIQUIDATION_THRESHOLD;
+        return getTokenAmountFromUsd(token, collateralValueInUsd);
+    }
+
     function getTokenAmountFromUsd(address token, uint256 usdAmountInWei) public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[token]);
         (, int256 price,,,) = priceFeed.staleCheckLatestRoundData();
@@ -464,4 +481,96 @@ contract DSCEngine is ReentrancyGuard {
     function getHealthFactor(address user) external view returns (uint256) {
         return _healthFactor(user);
     }
+
+    /*
+    ////////////////////////// 计算给定赎回抵押品数量下，需要销毁的最少 DSC
+function calculateMinDscToBurn(
+    address user,
+    address collateralToken,
+    uint256 collateralAmount
+) external view returns (uint256) {
+    // 获取当前信息
+    (uint256 totalDscMinted, uint256 collateralValueInUsd) = _getAccountInformation(user);
+    
+    // 计算赎回后的抵押品价值
+    uint256 collateralToRedeem = _getUsdValue(collateralToken, collateralAmount);
+    uint256 newCollateralValue = collateralValueInUsd - collateralToRedeem;
+    
+    // 计算需要销毁的最少 DSC 以保持健康因子 >= 1.0
+    uint256 maxDscAfterRedeem = (newCollateralValue * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
+    
+    if (maxDscAfterRedeem >= totalDscMinted) {
+        return 0; // 不需要销毁 DSC
+    }
+    
+    return totalDscMinted - maxDscAfterRedeem;
+}
+
+// 计算给定销毁 DSC 数量下，能赎回的最大抵押品
+function calculateMaxCollateralToRedeem(
+    address user,
+    address collateralToken,
+    uint256 dscToBurn
+) external view returns (uint256) {
+    (uint256 totalDscMinted, uint256 collateralValueInUsd) = _getAccountInformation(user);
+    
+    uint256 newDscAmount = totalDscMinted - dscToBurn;
+    uint256 minCollateralNeeded = (newDscAmount * LIQUIDATION_PRECISION) / LIQUIDATION_THRESHOLD;
+    uint256 maxCollateralToRedeem = collateralValueInUsd - minCollateralNeeded;
+    
+    return getTokenAmountFromUsd(collateralToken, maxCollateralToRedeem);
+}
+
+    */
+
+    /*
+
+////////////// 自动计算并赎回最大可能的抵押品（销毁指定 DSC）
+function redeemMaxCollateralForDsc(
+    address tokenCollateralAddress,
+    uint256 amountDscToBurn
+) external {
+    uint256 maxCollateral = calculateMaxCollateralToRedeem(
+        msg.sender, 
+        tokenCollateralAddress, 
+        amountDscToBurn
+    );
+    
+    _burnDsc(amountDscToBurn, msg.sender, msg.sender);
+    _redeemCollateral(tokenCollateralAddress, maxCollateral, msg.sender, msg.sender);
+    _revertIfHealthFactorIsBroken(msg.sender);
+}
+
+/////////////////////// 自动计算并销毁最少 DSC（赎回指定抵押品）
+function redeemCollateralWithMinDsc(
+    address tokenCollateralAddress,
+    uint256 amountCollateral
+) external {
+    uint256 minDscToBurn = calculateMinDscToBurn(
+        msg.sender,
+        tokenCollateralAddress,
+        amountCollateral
+    );
+    
+    _burnDsc(minDscToBurn, msg.sender, msg.sender);
+    _redeemCollateral(tokenCollateralAddress, amountCollateral, msg.sender, msg.sender);
+    _revertIfHealthFactorIsBroken(msg.sender);
+}
+    */
+
+    /*
+
+function redeemCollateralForDscStrict(
+    address tokenCollateralAddress,
+    uint256 amountCollateral,
+    uint256 amountDscToBurn,
+    uint256 minHealthFactor  ////////////////////// 用户期望的最低健康因子
+) external {
+    _burnDsc(amountDscToBurn, msg.sender, msg.sender);
+    _redeemCollateral(tokenCollateralAddress, amountCollateral, msg.sender, msg.sender);
+    
+    uint256 finalHealthFactor = _healthFactor(msg.sender);
+    require(finalHealthFactor >= minHealthFactor, "Health factor too low");
+}
+    */
 }
