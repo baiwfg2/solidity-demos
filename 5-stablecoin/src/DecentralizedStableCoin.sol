@@ -41,7 +41,7 @@ DSCEngine smart contract.
  */
 contract DecentralizedStableCoin is ERC20Burnable, Ownable {
     error DecentralizedStableCoin__AmountMustBeMoreThanZero();
-    error DecentralizedStableCoin__BurnAmountExceedsBalance();
+    error DecentralizedStableCoin__BurnAmountExceedsBalance(uint256 amount);
     error DecentralizedStableCoin__NotZeroAddress();
 
     /*
@@ -60,7 +60,7 @@ contract DecentralizedStableCoin is ERC20Burnable, Ownable {
             revert DecentralizedStableCoin__AmountMustBeMoreThanZero();
         }
         if (balance < _amount) {
-            revert DecentralizedStableCoin__BurnAmountExceedsBalance();
+            revert DecentralizedStableCoin__BurnAmountExceedsBalance(_amount);
         }
         super.burn(_amount);
     }

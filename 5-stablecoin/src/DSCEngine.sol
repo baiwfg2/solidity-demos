@@ -30,6 +30,7 @@ import { OracleLib, AggregatorV3Interface } from "./libraries/OracleLib.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { DecentralizedStableCoin } from "./DecentralizedStableCoin.sol";
+import { console } from "forge-std/console.sol";
 
 /*
  * @title DSCEngine
@@ -242,6 +243,7 @@ contract DSCEngine is ReentrancyGuard {
         uint256 bonusCollateral = (tokenAmountFromDebtCovered * LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
         // Burn DSC equal to debtToCover
         // Figure out how much collateral to recover based on how much burnt
+        console.log(tokenAmountFromDebtCovered, bonusCollateral);
         _redeemCollateral(collateral, tokenAmountFromDebtCovered + bonusCollateral, user, msg.sender);
         // 这里有一个前提：liquidator 自身得有足够的DSC 来偿还user 债务
         _burnDsc(debtToCover, user, msg.sender);

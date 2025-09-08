@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import { Test } from "forge-std/Test.sol";
+import { Test, console } from "forge-std/Test.sol";
 import { DeployDsc } from "../../script/DeployDsc.s.sol";
 import { DecentralizedStableCoin } from "../../src/DecentralizedStableCoin.sol";
 import { DSCEngine } from "../../src/DSCEngine.sol";
@@ -10,7 +10,9 @@ import { ERC20Mock } from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 import { MockTokenTransferFromFailed, MockTokenTransferFailed, MockTokenMintFailed } from "../mocks/MockUtils.sol";
 import { MockV3Aggregator } from "@chainlink/contracts/src/v0.8/shared/mocks/MockV3Aggregator.sol";
 
-contract DscdsceTest is Test, CodeConstants {
+contract DscEngineTest is Test, CodeConstants {
+    event CollateralRedeemed(address indexed redeemFrom, address indexed redeemTo, address token, uint256 amount);
+
     DeployDsc deployer;
     DecentralizedStableCoin dsc;
     DSCEngine dsce;
@@ -27,6 +29,10 @@ contract DscdsceTest is Test, CodeConstants {
     uint256 public constant STARTING_USER_BALANCE = 10 ether;
     uint256 public constant MIN_HEALTH_FACTOR = 1e18;
     uint256 public constant LIQUIDATION_THRESHOLD = 50;
+
+    // Liquidation
+    address public liquidator = makeAddr("liquidator");
+    uint256 public collateralToCover = 20 ether;
 
     function setUp() public {
         HelperConfig _cfg;
@@ -251,6 +257,24 @@ contract DscdsceTest is Test, CodeConstants {
     //     dsce.burnDsc(1);
     // }
 
+    function testBurnDscTransferFailed() public {
+        // Arrange - Setup
+        MockTokenTransferFromFailed mockDsc = new MockTokenTransferFromFailed();
+        tokenAddresses = [weth];
+        feedAddresses = [cfg.wethPriceFeed];
+        address owner = msg.sender;
+        vm.prank(owner);
+        DSCEngine mockDsce = new DSCEngine(tokenAddresses, feedAddresses, address(mockDsc));
+
+        vm.startPrank(user);
+        ERC20Mock(weth).approve(address(mockDsce), amountCollateral);
+        mockDsce.depositCollateralAndMintDsc(tokenAddresses[0], amountCollateral, amountToMint);
+
+        vm.expectRevert(DSCEngine.DSCEngine__TransferFailed.selector);
+        mockDsce.burnDsc(amountToMint);
+        vm.stopPrank();
+    }
+
     function testCanBurnDsc() public depositedCollateralAndMintedDsc {
         vm.startPrank(user);
         dsc.approve(address(dsce), amountToMint);
@@ -310,12 +334,204 @@ contract DscdsceTest is Test, CodeConstants {
         vm.stopPrank();
     }
 
-    // function testEmitCollateralRedeemedWithCorrectArgs() public depositedCollateral {
-    //     vm.expectEmit(true, true, true, true, address(dsce));
-    //     emit CollateralRedeemed(user, user, weth, amountCollateral);
-    //     vm.startPrank(user);
-    //     dsce.redeemCollateral(weth, amountCollateral);
-    //     vm.stopPrank();
-    // }
+    function testEmitCollateralRedeemedWithCorrectArgs() public depositedCollateral {
+        /*
+        第1个 true：检查 topic1 (redeemFrom)
+        验证 redeemFrom 是否等于期望的 user
 
+        第2个 true：检查 topic2 (redeemTo)
+        验证 redeemTo 是否等于期望的 user
+
+        第3个 true：检查 topic3
+        但这个事件没有第3个 indexed 参数，所以这个参数实际无效
+
+        第4个 true：检查 data 部分
+        验证非 indexed 的数据：token 和 amount
+        address(dsce)：指定事件发出者
+
+        验证事件必须从 dsce 合约发出
+        */
+        vm.expectEmit(true, true, false, true, address(dsce));
+        emit CollateralRedeemed(user, user, weth, amountCollateral);
+        vm.startPrank(user);
+        dsce.redeemCollateral(weth, amountCollateral);
+        vm.stopPrank();
+    }
+
+    ///////////////////////////////////
+    // redeemCollateralForDsc Tests //
+    //////////////////////////////////
+
+    function testMustRedeemMoreThanZero() public depositedCollateralAndMintedDsc {
+        vm.startPrank(user);
+        //dsc.approve(address(dsce), amountToMint);
+        vm.expectRevert(DSCEngine.DSCEngine__NeedsMoreThanZero.selector);
+        dsce.redeemCollateralForDsc(weth, 0, amountToMint);
+        vm.stopPrank();
+    }
+
+    function testCanRedeemDepositedCollateral() public depositedCollateralAndMintedDsc {
+        vm.startPrank(user);
+        dsc.approve(address(dsce), amountToMint);
+        dsce.redeemCollateralForDsc(weth, amountCollateral, amountToMint);
+        vm.stopPrank();
+
+        uint256 userBalance = dsc.balanceOf(user);
+        assertEq(userBalance, 0);
+    }
+
+    ///////////////////////
+    // Liquidation Tests //
+    ///////////////////////
+
+    // seems that no `MockMoreDebtDSC` is needed
+    function testMustImproveHealthFactorOnLiquidation() public depositedCollateralAndMintedDsc {
+        // Arrange - 给liquidator 一定的抵押品
+        collateralToCover = 1 ether;
+        ERC20Mock(weth).mint(liquidator, collateralToCover);
+
+        vm.startPrank(liquidator);
+        ERC20Mock(weth).approve(address(dsce), collateralToCover);
+        uint256 debtToCover = 10 ether; // 需要清算的债务，不一定是用户的总债务
+        // 在eth 价格未变时，清算者的health factor还是正常的
+        dsce.depositCollateralAndMintDsc(weth, collateralToCover, amountToMint);
+        dsc.approve(address(dsce), debtToCover);
+        // 设置eth价格大跌，以使得user 的health factor不满足条件
+        int256 ethUsdUpdatedPrice = 10e8;
+        MockV3Aggregator(cfg.wethPriceFeed).updateAnswer(ethUsdUpdatedPrice);
+        // Act/Assert
+        vm.expectRevert(DSCEngine.DSCEngine__HealthFactorNotImproved.selector);
+        /*
+          user的startingHealthFactor = 10 * P * 0.5 / 100 >= 1时， P>=20
+
+          当 P = 10时， user的 startingUserHealthFactor = 0.5
+
+          user 状态：
+            collateral = amountCollateral - (debtToCover / P) * 1.1
+                = 10 - (10/P) * 1.1
+            dsc 剩下： 100 - 10 = 90
+            当 P = 10时，endingUserHealthFactor = ((10 - 1.1) * 10* 0.5 / 90) e18 < 0.5e18
+            因此，此时 user 的health factor 没有改善
+
+          liquidator 状态：
+            由getTokenAmountFromUsd知可得到的collateral = debtToCover / 2 = 5 eth
+            算上bonus，total_collateral = collateralToCover + 5 + 0.1 * 5 = 6.5 eth
+            为user偿还DSC后，剩下total_dsc = amountToMint - debtToCover = 100 - 10 = 90
+        */
+        dsce.liquidate(weth, user, debtToCover);
+        vm.stopPrank();
+    }
+
+    function testCantLiquidateGoodHealthFactor() public depositedCollateralAndMintedDsc {
+        ERC20Mock(weth).mint(liquidator, collateralToCover);
+
+        vm.startPrank(liquidator);
+        ERC20Mock(weth).approve(address(dsce), collateralToCover);
+        dsce.depositCollateralAndMintDsc(weth, collateralToCover, amountToMint);
+        // dsc.approve(address(dsce), amountToMint); // not necessary
+
+        vm.expectRevert(DSCEngine.DSCEngine__HealthFactorOk.selector);
+        dsce.liquidate(weth, user, amountToMint);
+        vm.stopPrank();
+    }
+
+    modifier liquidated() {
+        vm.startPrank(user);
+        ERC20Mock(weth).approve(address(dsce), amountCollateral);
+        dsce.depositCollateralAndMintDsc(weth, amountCollateral, amountToMint); // 10, 100
+        vm.stopPrank();
+
+        int256 ethUsdUpdatedPrice = 18e8;
+        MockV3Aggregator(cfg.wethPriceFeed).updateAnswer(ethUsdUpdatedPrice);
+
+        ERC20Mock(weth).mint(liquidator, collateralToCover);
+
+        vm.startPrank(liquidator);
+        ERC20Mock(weth).approve(address(dsce), collateralToCover);
+        dsce.depositCollateralAndMintDsc(weth, collateralToCover, amountToMint); // 20, 100
+        dsc.approve(address(dsce), amountToMint);
+        dsce.liquidate(weth, user, amountToMint); // We are covering their whole debt
+        /*
+          user的startingHealthFactor = 10 * P * 0.5 / 100 >= 1时， P>=20
+
+          为了能继续清算，P < 20
+
+          user 状态：
+            collateral = amountCollateral - (debtToCover / P) * 1.1
+                = 10 - (10/P) * 1.1
+            
+          liquidator 状态：
+            由getTokenAmountFromUsd知可得到的collateral = debtToCover / P = 100/18 = 5.555555555555555
+            算上bonus，total_collateral = collateralToCover + 100/P * 1.1 = 20 + 5.5 = 25.5 (其中只有 100/P*1.1 在ERC20Mock balance中)
+            为user偿还DSC后，剩下total_dsc = amountToMint - debtToCover = 100 - 100 = 0
+        */
+        vm.stopPrank();
+        _;
+    }
+
+    function testLiquidationPayoutIsCorrect() public liquidated {
+        uint256 liquidatorWethBalance = ERC20Mock(weth).balanceOf(liquidator);
+        uint256 expectedWeth = dsce.getTokenAmountFromUsd(weth, amountToMint)
+            + (dsce.getTokenAmountFromUsd(weth, amountToMint) * dsce.getLiquidationBonus() / dsce.getLiquidationPrecision());
+        // 花了很久理解，为何结果是 6_111_111_111_111_111_110 = 5555555555555555555 + 555555555555555555
+        // 而不是 100/18 * 1.1 = 6.111111111111112
+        uint256 hardCodedExpected = 6_111_111_111_111_111_110;
+        assertEq(liquidatorWethBalance, hardCodedExpected);
+        assertEq(liquidatorWethBalance, expectedWeth);
+    }
+
+    function testUserStillHasSomeEthAfterLiquidation() public liquidated {
+        // Get how much WETH the user lost
+        uint256 amountLiquidated = dsce.getTokenAmountFromUsd(weth, amountToMint)
+            + (dsce.getTokenAmountFromUsd(weth, amountToMint) * dsce.getLiquidationBonus() / dsce.getLiquidationPrecision());
+
+        uint256 usdAmountLiquidated = dsce.getUsdValue(weth, amountLiquidated);
+        uint256 totalCollateralUsd = dsce.getUsdValue(weth, amountCollateral);
+        console.log("totalCollateralUsd:", totalCollateralUsd, ", liquidatedUsd:", usdAmountLiquidated);
+        console.log("amountLiquidated:", amountLiquidated); // 6111111111111111110
+        // user 剩余的抵押品价值
+        uint256 expectedUserCollateralValueInUsd = totalCollateralUsd - (usdAmountLiquidated);
+
+        (, uint256 userCollateralValueInUsd) = dsce.getAccountInformation(user);
+        // 10e18 * 18 - 6_111_111_111_111_111_110 * 18
+        uint256 hardCodedExpectedValue = 70_000_000_000_000_000_020;
+        assertEq(userCollateralValueInUsd, expectedUserCollateralValueInUsd);
+        assertEq(userCollateralValueInUsd, hardCodedExpectedValue);
+    }
+
+    function testLiquidatorStateAfterLiquidation() public liquidated {
+        (uint256 liquidatorDscMinted,) = dsce.getAccountInformation(liquidator);
+        // 清算只是burn user的dsc，不是burn liquidator自己的，因此 s_DSCMinted[liquidator] 并未变
+        // DSC 债务：100（不变，这是他自己铸造的债务）; DSC 余额：0（用于清算了）
+        assertEq(liquidatorDscMinted, amountToMint);
+        uint256 userBalance = dsc.balanceOf(liquidator);
+        assertEq(userBalance, 0);
+    }
+
+    function testUserStateAfterLiquidation() public liquidated {
+        (uint256 userDscMinted,) = dsce.getAccountInformation(user);
+        assertEq(userDscMinted, 0);
+
+        uint256 userBalance = dsc.balanceOf(user);
+        // user 的DSC 仍在 DSC token里，不会被liquidate 处理
+        assertEq(userBalance, amountToMint);
+    }
+
+    // some view or pure function tests
+    function testGetLiquidationThreshold() public {
+        uint256 threshold = dsce.getLiquidationThreshold();
+        assertEq(threshold, 50); // 50%
+    }
+
+    function testGetMinHealthFactor() public {
+        uint256 minHealthFactor = dsce.getMinHealthFactor();
+        assertEq(minHealthFactor, 1e18);
+    }
+
+    function testGetCollateralTokens() public {
+        address[] memory tokens = dsce.getCollateralTokens();
+        assertEq(tokens.length, 2);
+        assertEq(tokens[0], weth);
+        assertEq(tokens[1], wbtc);
+    }
 }

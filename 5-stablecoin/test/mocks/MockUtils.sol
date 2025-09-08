@@ -21,6 +21,11 @@ contract MockTokenTransferFailed is ERC20 {
 // ERC20ReturnFalseMock 的两个 transfer 都return false，有时不太灵活，会造成麻烦
 contract MockTokenTransferFromFailed is ERC20ReturnFalseMock {
     constructor() ERC20("FalseToken", "FALSE") {}
+
+    function mint(address to, uint256 amount) external returns (bool) {
+        _mint(to, amount);
+        return true;
+    }
 }
 
 contract MockTokenMintFailed is ERC20Burnable {
