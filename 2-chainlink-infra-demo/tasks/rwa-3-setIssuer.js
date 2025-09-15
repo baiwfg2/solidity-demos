@@ -1,4 +1,4 @@
-/* Leadint to:
+/* Leading to:
 
 Error HH9: Error while loading Hardhat's configuration.
 

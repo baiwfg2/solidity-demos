@@ -31,6 +31,7 @@ abstract contract FunctionsSource {
         "const metadataString = JSON.stringify(metadata);"
         "const ipfsCid = await Hash.of(metadataString);"
         "return Functions.encodeString(`ipfs://${ipfsCid}`);";
+        // here the ipfsCid has been prepared/uploaded by chainklink Frank, that is QmRYfrZ4yobkBMUD3Y4d4NV28ZeTUFCBwWSm1Z3B2Ndkca
 
     string public getPrices =
         "const { ethers } = await import('npm:ethers@6.10.0');"

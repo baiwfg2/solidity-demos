@@ -5,7 +5,7 @@ async function main() {
     const vrfFactory = await ethers.getContractFactory("VRFD20");
 
     // let subId = BigInt(process.argv[2]);
-    let subId = BigInt(process.env.CHAINLINK_SUBID);
+    let subId = BigInt(process.env.CHAINLINK_VRF_SUBID);
     const vrf = await vrfFactory.deploy(subId);
     await vrf.waitForDeployment();
     let owner = await vrf.owner();
